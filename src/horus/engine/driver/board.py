@@ -38,17 +38,19 @@ class OldFirmware(Exception):
 class Board(object):
 
     """Board class. For accessing to the scanner board
-
+	Mofified for Davinci AiO support
     Gcode commands:
 
-        G1 Fnnn : feed rate
-        G1 Xnnn : move motor
+        G201 Fnnn : feed rate
+        G201 Xnnn : move motor in mm
+        G201 Ennn : move motor in deg
         G50     : reset origin position
+		M17     : motor_disable
+		M18		: motor_enable
+        M70 Tn  : switch off laser n, 0 index based
+        M71 Tn  : switch on laser n, 0 index based 
 
-        M70 Tn  : switch off laser n
-        M71 Tn  : switch on laser n
-
-        M50 Tn  : read ldr sensor
+        M60 Tn  : read ldr sensor
 
     """
 
@@ -76,19 +78,20 @@ class Board(object):
         try:
             self._serial_port = serial.Serial(self.serial_name, self.baud_rate, timeout=2)
             if self._serial_port.isOpen():
-                self._reset()  # Force Reset and flush
-                version = self._serial_port.readline()
-                if "Horus 0.1 ['$' for help]" in version:
-                    raise OldFirmware()
-                elif "Horus 0.2 ['$' for help]" in version:
-                    self.motor_speed(1)
-                    self._serial_port.timeout = 0.05
-                    self._is_connected = True
-                    # Set current position as origin
-                    self.motor_reset_origin()
-                    logger.info(" Done")
-                else:
-                    raise WrongFirmware()
+                #Davinci specific - change to no check FW
+                #self._reset()  # Force Reset and flush
+                #version = self._serial_port.readline()
+                #if "Horus 0.1 ['$' for help]" in version:
+                #    raise OldFirmware()
+                #elif "Horus 0.2 ['$' for help]" in version:
+                 self.motor_speed(1)
+                 self._serial_port.timeout = 0.05
+                 self._is_connected = True
+                 # Set current position as origin
+                 self.motor_reset_origin()
+                 logger.info(" Done")
+                #else:
+                 #   raise WrongFirmware()
             else:
                 raise BoardNotConnected()
         except Exception as exception:
@@ -124,13 +127,15 @@ class Board(object):
         if self._is_connected:
             if self._motor_speed != value:
                 self._motor_speed = value
-                self._send_command("G1F{0}".format(value))
+                #Davici Specific
+                self._send_command("G201 F{0}".format(value))
 
     def motor_acceleration(self, value):
         if self._is_connected:
             if self._motor_acceleration != value:
                 self._motor_acceleration = value
-                self._send_command("$120={0}".format(value))
+                #Davinci Specific
+                #self._send_command("$120={0}".format(value))
 
     def motor_enable(self):
         if self._is_connected:
@@ -159,19 +164,30 @@ class Board(object):
     def motor_move(self, step=0, nonblocking=False, callback=None):
         if self._is_connected:
             self._motor_position += step * self._motor_direction
-            self.send_command("G1X{0}".format(self._motor_position), nonblocking, callback)
+            #Davici Specific
+            self.send_command("G201 E{0}".format(self._motor_position), nonblocking, callback)
 
     def laser_on(self, index):
         if self._is_connected:
             if not self._laser_enabled[index]:
                 self._laser_enabled[index] = True
-                self._send_command("M71T" + str(index + 1))
+                #Davici Specific
+                if index == 0: 
+                    strindex="1"
+                else :
+                    strindex="0"
+                self._send_command("M71 T" + strindex)
 
     def laser_off(self, index):
         if self._is_connected:
             if self._laser_enabled[index]:
                 self._laser_enabled[index] = False
-                self._send_command("M70T" + str(index + 1))
+                #Davici Specific
+                if index == 0: 
+                    strindex="1"
+                else :
+                    strindex="0"
+                self._send_command("M70 T" + strindex)
 
     def lasers_on(self):
         for i in xrange(self._laser_number):
@@ -182,7 +198,7 @@ class Board(object):
             self.laser_off(i)
 
     def ldr_sensor(self, pin):
-        value = self._send_command("M50T" + pin, read_lines=True).split("\n")[0]
+        value = self._send_command("M60 T" + pin, read_lines=True).split("\n")[0]
         try:
             return int(value)
         except ValueError:
@@ -198,6 +214,8 @@ class Board(object):
     def _send_command(self, req, callback=None, read_lines=False):
         """Sends the request and returns the response"""
         ret = ''
+        #Davinci specific to track commands
+        logger.debug(req)
         if self._is_connected and req != '':
             if self._serial_port is not None and self._serial_port.isOpen():
                 try:
