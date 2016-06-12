@@ -61,7 +61,7 @@ class Autocheck(Calibration):
             self.driver.board.lasers_off()
             self.driver.board.motor_enable()
             self.driver.board.motor_reset_origin()
-            self.driver.board.motor_speed(200)
+            self.driver.board.motor_speed(25)
             self.driver.board.motor_acceleration(200)
 
             # Perform autocheck
